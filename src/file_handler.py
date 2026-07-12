@@ -3,14 +3,14 @@ import glob
 import tkinter as tk
 from tkinter import filedialog
 
-def get_base_directory():
+def get_base_directory_from_file():
     """Opens a native file browser window and extracts its parent directory path."""
     root = tk.Tk()
     root.withdraw()
     root.lift()
     root.attributes('-topmost', True)
     
-    print("\n[UI] Opening Browser... Choose ANY file inside your target galaxy directory.")
+    print("\n[UI] Opening File Browser... Choose ANY file inside your target galaxy directory.")
     selected_file = filedialog.askopenfilename(
         title="Click ANY file inside your main imaging folder to set the scan base",
         filetypes=[("All Files", "*.*")]
@@ -42,8 +42,9 @@ def scan_for_pairs(base_dir):
         starless_files = list(set(starless_files))
         starmask_files = list(set(starmask_files))
 
+        # Check if the folder contains at least one match for both layers
         if starless_files and starmask_files:
-            # Safely grab the first matched string file paths from the list elements
+            # Unpack the first list entry cleanly as a string path [0]
             valid_pairs.append({
                 'folder': os.path.basename(root_dir),
                 'starless': starless_files[0], 

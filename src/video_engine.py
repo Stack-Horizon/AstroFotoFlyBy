@@ -4,18 +4,17 @@ import numpy as np
 from astropy.io import fits
 
 def unwrap_path(item):
-    """Recursively unpacks any list, tuple, or set down to a clean text string."""
-    if isinstance(item, (list, tuple, set)):
+    """Bulletproof iterative unwrapper that guarantees a clean string output."""
+    while isinstance(item, (list, tuple, set)):
         if len(item) > 0:
-            # Look at the first element inside the container
-            return unwrap_path(list(item)[0])
+            # Safely grab the very first entry inside the sequence container layout
+            item = list(item)[0]
         else:
             return None
     return item
 
 def load_and_normalize_image(file_path):
     """Intelligently processes standard consumer formats or memory-mapped FITS layers."""
-    # FIXED: Guarantee the path is a clean string by running it through the unwrapper
     file_path = unwrap_path(file_path)
     
     if not file_path or not isinstance(file_path, str):
@@ -80,7 +79,6 @@ def render_spaceflight(selected_pair):
     """Executes frame transformation layouts and exports an MP4 movie container."""
     print(f"\n[Step 3] Loading image assets into background processing buffers...")
     
-    # Safely unwrap strings from any array structures passed down
     starless_src = unwrap_path(selected_pair['starless'])
     starmask_src = unwrap_path(selected_pair['starmask'])
     out_dir = unwrap_path(selected_pair['output_dir'])

@@ -5,6 +5,14 @@ from astropy.io import fits
 
 def load_and_normalize_image(file_path):
     """Intelligently processes standard consumer formats or memory-mapped FITS layers."""
+    # FIXED: Extract the raw string path if it was passed down as a glob list wrapper
+    if isinstance(file_path, list):
+        if len(file_path) > 0:
+            file_path = file_path[0]
+        else:
+            print(" ❌ Error: Received an empty file path slot.")
+            return None
+
     ext = os.path.splitext(file_path).lower()
     
     if ext not in ['.fit', '.fits']:
@@ -70,12 +78,18 @@ def render_spaceflight(selected_pair):
         return
 
     if bg_img.shape != stars_img.shape:
-        stars_img = cv2.resize(stars_img, (bg_img.shape[1], bg_img.shape[0]))
+        stars_img = cv2.resize(stars_img, (bg_img.shape, bg_img.shape))
 
     height, width, _ = bg_img.shape
     fps = 30
     total_frames = fps * 10
-    output_path = os.path.join(selected_pair['output_dir'], f"spaceflight_{selected_pair['folder']}.mp4")
+    
+    # FIXED: Extract output path string safely from list structure if needed
+    out_dir = selected_pair['output_dir']
+    if isinstance(out_dir, list):
+        out_dir = out_dir[0]
+        
+    output_path = os.path.join(out_dir, f"spaceflight_{selected_pair['folder']}.mp4")
 
     render_w, render_h = width, height
     if width > 1920:

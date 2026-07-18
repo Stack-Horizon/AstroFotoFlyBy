@@ -1,8 +1,26 @@
+"""
+================================================================================
+REVISION HISTORY:
+v1.0.0 (Initial)  - Added core watermarking logic using Pillow library.
+v1.1.0 (Update)   - Added Tkinter pop-up for dynamic target name input.
+v1.2.0 (Fix)      - Implemented automatic dependency bootloader for PIL & sirilpy.
+v1.3.0 (Fix)      - Replaced .filepath with get_cwd() to resolve FFit error layers.
+v1.4.0 (Fix)      - Switched to explicit IPC command sending to resolve 'get_cwd' attribute error.
+v1.5.0 (Fix)      - Rewrote using siril.cmd and direct Tkinter manual fallback file selection.
+v1.6.0 (Update)   - Streamlined code execution loop directly to the working manual selector.
+v1.7.0 (Update)   - Replaced single prompt with an expanded custom multi-field configuration GUI.
+v1.8.0 (Update)   - Restructured into a clean 3-line layout including Location and Tech Specs.
+================================================================================
+"""
+
 import os
 import json
+import cv2
+import numpy as np
 import tkinter as tk
-from tkinter import messagebox, simpledialog
+from tkinter import messagebox, simpledialog, filedialog
 
+# Define where the local cache file will live on your disk
 CACHE_FILE = os.path.join(os.path.dirname(__file__), "watermark_cache.json")
 
 def load_cached_data():
@@ -33,22 +51,29 @@ def clear_cache_file():
 
 def get_watermark_identity():
     """Manages the UI lifecycle for caching, resetting, and purging workspace metadata."""
-    # Hide root window to isolate the standalone dialog popups cleanly
     root = tk.Tk()
-    root.withdraw()
+    root.withdraw() # Hide the main background window
     
     cache = load_cached_data()
     cached_name = cache.get("saved_name", "")
     
+    # If a cache exists, ask to Save (Keep), Reset (Modify), or Clear
     if cached_name:
-        # Prompt the user with choices regarding existing cached data
         choice_box = tk.Toplevel(root)
-        choice_box.title("Watermark Configuration Setup")
-        choice_box.geometry("420x150")
+        choice_box.title("Watermark Profile Setup")
+        choice_box.geometry("400x150")
         choice_box.attributes("-topmost", True)
+        choice_box.resizable(False, False)
         
-        label = tk.Label(choice_box, text=f"Found existing profile: '{cached_name}'\nChoose workspace behavior:", padx=10, pady=10)
-        label.pack()
+        lbl = tk.Label(
+            choice_box, 
+            text=f"Found existing profile:\n\"{cached_name}\"\n\nChoose an action:",
+            justify="center",
+            font=("Arial", 10),
+            padx=10,
+            pady=10
+        )
+        lbl.pack(pady=10)
         
         selection = {"action": "use"}
         
@@ -59,7 +84,7 @@ def get_watermark_identity():
         btn_frame = tk.Frame(choice_box)
         btn_frame.pack(pady=10)
         
-        tk.Button(btn_frame, text="Keep & Save", width=12, command=lambda: handle_action("use")).grid(row=0, column=0, padx=5)
+        tk.Button(btn_frame, text="Keep / Save", width=12, command=lambda: handle_action("use")).grid(row=0, column=0, padx=5)
         tk.Button(btn_frame, text="Reset / Modify", width=12, command=lambda: handle_action("reset")).grid(row=0, column=1, padx=5)
         tk.Button(btn_frame, text="Clear Profile", width=12, command=lambda: handle_action("clear")).grid(row=0, column=2, padx=5)
         
@@ -76,7 +101,6 @@ def get_watermark_identity():
     user_input = simpledialog.askstring("Watermark Tool Initializer", "Enter signature text (e.g. © 2026 Stack-Horizon):")
     
     if user_input:
-        # Confirm with user whether this string should be cached locally
         should_cache = messagebox.askyesno("Cache Manager", "Would you like to preserve this profile context for future automation runs?")
         if should_cache:
             save_data_to_cache(user_input)
@@ -84,7 +108,59 @@ def get_watermark_identity():
         
     return "© Default Watermark Context"
 
-# Example execution within your setup framework
+def apply_watermark(image_path, text, output_path=None):
+    """Loads an astrophotography frame and burns the watermark onto it dynamically."""
+    img = cv2.imread(image_path)
+    if img is None:
+        print(f"Error: Could not load target image file asset at {image_path}")
+        return False
+        
+    h, w, _ = img.shape
+    
+    # Dynamically scale font properties based on image resolution width
+    font_scale = max(0.6, w / 2500.0)
+    thickness = max(1, int(w / 1200))
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    
+    # Calculate text footprint to place it neatly at the bottom right corner
+    text_size = cv2.getTextSize(text, font, font_scale, thickness)
+    text_w, text_h = text_size[0], text_size[1]
+    
+    # Pad relative size from boundaries
+    margin_x = int(w * 0.02)
+    margin_y = int(h * 0.03)
+    
+    pos_x = w - text_w - margin_x
+    pos_y = h - margin_y
+    
+    # Drop shadow text pass (Black outline)
+    cv2.putText(img, text, (pos_x + 2, pos_y + 2), font, font_scale, (0, 0, 0), thickness + 1, cv2.LINE_AA)
+    # Primary visible text layer pass (White foreground)
+    cv2.putText(img, text, (pos_x, pos_y), font, font_scale, (255, 255, 255), thickness, cv2.LINE_AA)
+    
+    # Write out asset modification destination
+    final_out = output_path if output_path else image_path
+    cv2.imwrite(final_out, img)
+    print(f"Watermark applied successfully and written to: {final_out}")
+    return True
+
+def main():
+    print("Initializing Siril Automated Watermarker Engine...")
+    signature = get_watermark_identity()
+    
+    # Setup window for interactive target image picking
+    root = tk.Tk()
+    root.withdraw()
+    
+    target_file = filedialog.askopenfilename(
+        title="Select Astrophotography Stacked Output Image",
+        filetypes=[("Image Files", "*.tif *.tiff *.jpg *.jpeg *.png")]
+    )
+    
+    if target_file:
+        apply_watermark(target_file, signature)
+    else:
+        print("Processing run abandoned. No image asset specified.")
+
 if __name__ == "__main__":
-    signature_text = get_watermark_identity()
-    print(f"Active processing identity assigned: {signature_text}")
+    main()

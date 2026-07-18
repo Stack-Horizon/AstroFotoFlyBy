@@ -10,6 +10,7 @@ v1.5.0 (Fix)      - Rewrote using siril.cmd and direct Tkinter manual fallback f
 v1.6.0 (Update)   - Streamlined code execution loop directly to the working manual selector.
 v1.7.0 (Update)   - Replaced single prompt with an expanded custom multi-field configuration GUI.
 v1.8.0 (Update)   - Restructured into a clean 3-line layout including Location and Tech Specs.
+v1.9.3 (Stable)   - Integrated global wildcard (*.*) filters for both image and asset browse dialogs.
 ================================================================================
 """
 
@@ -18,13 +19,11 @@ import json
 import cv2
 import numpy as np
 import tkinter as tk
-from tkinter import messagebox, simpledialog, filedialog
+from tkinter import messagebox, filedialog
 
-# Define where the local cache file will live on your disk
 CACHE_FILE = os.path.join(os.path.dirname(__file__), "watermark_cache.json")
 
 def load_cached_data():
-    """Retrieves saved configurations from the local JSON storage file."""
     if os.path.exists(CACHE_FILE):
         try:
             with open(CACHE_FILE, "r") as f:
@@ -33,57 +32,49 @@ def load_cached_data():
             return {}
     return {}
 
-def save_data_to_cache(name_data):
-    """Writes the current working signature data directly to local disk."""
+def save_data_to_cache(data_dict):
     try:
         with open(CACHE_FILE, "w") as f:
-            json.dump({"saved_name": name_data}, f)
+            json.dump(data_dict, f)
     except Exception as e:
-        print(f"Error updating local configuration cache: {e}")
+        print(f"Error saving configurations: {e}")
 
 def clear_cache_file():
-    """Removes the persistent local settings block from the workspace environment."""
     if os.path.exists(CACHE_FILE):
         try:
             os.remove(CACHE_FILE)
         except Exception as e:
-            print(f"Error removing cached file asset: {e}")
+            print(f"Error clearing cache file: {e}")
 
-def get_watermark_identity():
-    """Manages the UI lifecycle for caching, resetting, and purging workspace metadata."""
+def get_watermark_configuration():
     root = tk.Tk()
-    root.withdraw() # Hide the main background window
+    root.withdraw()
     
     cache = load_cached_data()
-    cached_name = cache.get("saved_name", "")
     
-    # If a cache exists, ask to Save (Keep), Reset (Modify), or Clear
-    if cached_name:
+    if cache:
         choice_box = tk.Toplevel(root)
         choice_box.title("Watermark Profile Setup")
-        choice_box.geometry("400x150")
+        choice_box.geometry("440x160")
         choice_box.attributes("-topmost", True)
         choice_box.resizable(False, False)
         
-        lbl = tk.Label(
-            choice_box, 
-            text=f"Found existing profile:\n\"{cached_name}\"\n\nChoose an action:",
-            justify="center",
-            font=("Arial", 10),
-            padx=10,
-            pady=10
-        )
-        lbl.pack(pady=10)
+        lbl_text = "Found existing profile specifications.\nChoose workspace behavior:"
+        if cache.get("sig_file"):
+            lbl_text += f"\nLogo Asset: {os.path.basename(cache['sig_file'])}"
+        else:
+            lbl_text += f"\nSignature Text: \"{cache.get('line1', '')}\""
+            
+        lbl = tk.Label(choice_box, text=lbl_text, justify="center", font=("Arial", 10))
+        lbl.pack(pady=15)
         
         selection = {"action": "use"}
-        
         def handle_action(act):
             selection["action"] = act
             choice_box.destroy()
             
         btn_frame = tk.Frame(choice_box)
-        btn_frame.pack(pady=10)
-        
+        btn_frame.pack(pady=5)
         tk.Button(btn_frame, text="Keep / Save", width=12, command=lambda: handle_action("use")).grid(row=0, column=0, padx=5)
         tk.Button(btn_frame, text="Reset / Modify", width=12, command=lambda: handle_action("reset")).grid(row=0, column=1, padx=5)
         tk.Button(btn_frame, text="Clear Profile", width=12, command=lambda: handle_action("clear")).grid(row=0, column=2, padx=5)
@@ -91,22 +82,73 @@ def get_watermark_identity():
         choice_box.wait_window()
         
         if selection["action"] == "use":
-            return cached_name
+            return cache
         elif selection["action"] == "clear":
             clear_cache_file()
-            cached_name = ""
-            # Fallthrough to ask for a new name definition below
-            
-    # Solicit fresh input if cache is blank or reset was requested
-    user_input = simpledialog.askstring("Watermark Tool Initializer", "Enter signature text (e.g. © 2026 Stack-Horizon):")
+            cache = {}
+
+    input_window = tk.Toplevel(root)
+    input_window.title("Configure Watermark Details (v1.9.3)")
+    input_window.geometry("540x240")
+    input_window.attributes("-topmost", True)
+    input_window.resizable(False, False)
+
+    result = {"cancelled": True}
+
+    tk.Label(input_window, text="Signature Image File (Optional):").grid(row=0, column=0, sticky="w", padx=10, pady=5)
+    file_path_var = tk.StringVar(value=cache.get("sig_file", ""))
+    file_entry = tk.Entry(input_window, textvariable=file_path_var, width=42)
+    file_entry.grid(row=0, column=1, padx=5, pady=5)
     
-    if user_input:
-        should_cache = messagebox.askyesno("Cache Manager", "Would you like to preserve this profile context for future automation runs?")
-        if should_cache:
-            save_data_to_cache(user_input)
-        return user_input
+    def browse_sig_image():
+        fp = filedialog.askopenfilename(
+            title="Select Logo/Signature File", 
+            filetypes=[("All Files", "*.*"), ("PNG Files", "*.png")]
+        )
+        if fp:
+            file_path_var.set(fp)
+    tk.Button(input_window, text="Browse...", command=browse_sig_image).grid(row=0, column=2, padx=5, pady=5)
+
+    tk.Label(input_window, text="Line 1: Name / Copyright Text:").grid(row=1, column=0, sticky="w", padx=10, pady=5)
+    line1_var = tk.StringVar(value=cache.get("line1", "© 2026 Stack-Horizon"))
+    tk.Entry(input_window, textvariable=line1_var, width=54).grid(row=1, column=1, columnspan=2, sticky="w", padx=5, pady=5)
+
+    tk.Label(input_window, text="Line 2: Target Location / Date:").grid(row=2, column=0, sticky="w", padx=10, pady=5)
+    line2_var = tk.StringVar(value=cache.get("line2", "Ventura, CA, USA"))
+    tk.Entry(input_window, textvariable=line2_var, width=54).grid(row=2, column=1, columnspan=2, sticky="w", padx=5, pady=5)
+
+    tk.Label(input_window, text="Line 3: Tech Specs / Equipment:").grid(row=3, column=0, sticky="w", padx=10, pady=5)
+    line3_var = tk.StringVar(value=cache.get("line3", "Siril Stacked Integration"))
+    tk.Entry(input_window, textvariable=line3_var, width=54).grid(row=3, column=1, columnspan=2, sticky="w", padx=5, pady=5)
+
+    def submit_form():
+        result["cancelled"] = False
+        result["sig_file"] = file_path_var.get().strip()
+        result["line1"] = line1_var.get().strip()
+        result["line2"] = line2_var.get().strip()
+        result["line3"] = line3_var.get().strip()
+        input_window.destroy()
+
+    btn_submit_frame = tk.Frame(input_window)
+    btn_submit_frame.grid(row=4, column=0, columnspan=3, pady=15)
+    tk.Button(btn_submit_frame, text="Confirm & Run", width=16, command=submit_form).pack(side="left", padx=10)
+    tk.Button(btn_submit_frame, text="Cancel", width=12, command=input_window.destroy).pack(side="left", padx=10)
+
+    input_window.wait_window()
+    
+    if result["cancelled"]:
+        return None
         
-    return "© Default Watermark Context"
+    should_cache = messagebox.askyesno("Cache Manager", "Would you like to preserve this profile context for future automation runs?")
+    if should_cache:
+        save_data_to_cache({
+            "sig_file": result["sig_file"],
+            "line1": result["line1"],
+            "line2": result["line2"],
+            "line3": result["line3"]
+        })
+        
+    return result
 
 def apply_watermark(image_path, config):
     img = cv2.imread(image_path)
@@ -131,7 +173,7 @@ def apply_watermark(image_path, config):
             x1 = w - target_w - margin_x
             x2 = w - margin_x
             
-            if logo.shape[2] == 4:
+            if len(logo.shape) > 2 and logo.shape[2] == 4:
                 alpha = logo[:, :, 3] / 255.0
                 for c in range(3):
                     img[y1:y2, x1:x2, c] = (1.0 - alpha) * img[y1:y2, x1:x2, c] + alpha * logo[:, :, c]
@@ -177,8 +219,11 @@ def main():
     root.withdraw()
     target_file = filedialog.askopenfilename(
         title="Select Astrophotography Target Image Frame Asset",
-        filetypes=[("Image Files", "*.tif *.tiff *.jpg *.jpeg *.png")]
+        filetypes=[("All Files", "*.*"), ("Image Files", "*.tif *.tiff *.jpg *.jpeg *.png")]
     )
     
     if target_file:
         apply_watermark(target_file, config)
+
+if __name__ == "__main__":
+    main()
